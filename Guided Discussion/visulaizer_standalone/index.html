@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClusteringLab | Density vs Centroid</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #050505;
+            color: #94a3b8;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .custom-range {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: #1e293b;
+            border-radius: 5px;
+            outline: none;
+        }
+
+        .custom-range::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #6366f1;
+            cursor: pointer;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+        }
+
+        .glass-panel {
+            background: rgba(8, 8, 8, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .spin-slow {
+            animation: spin-slow 10s linear infinite;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: rgba(255,255,255,0.5);
+        }
+
+        svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div id="app" class="flex h-screen w-full overflow-hidden">
+        <!-- Sidebar Controls -->
+        <aside class="w-80 h-full bg-[#0a0a0a] border-r border-white/5 p-6 flex flex-col space-y-8 overflow-y-auto z-20">
+            <div>
+                <h1 class="text-2xl font-black text-white mb-1 tracking-tighter italic uppercase">
+                    CLUSTERING<span class="text-indigo-500">LAB</span>
+                </h1>
+                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">Density vs Centroid Analysis</p>
+            </div>
+
+            <!-- Dataset Selection -->
+            <div class="space-y-4">
+                <label class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Dataset Architecture</label>
+                <div id="dataset-buttons" class="grid grid-cols-2 gap-2">
+                    <!-- Buttons injected by JS -->
+                </div>
+                <button id="btn-new-sample" class="w-full flex items-center justify-center gap-2 py-2 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded text-[10px] font-bold text-slate-400 uppercase tracking-widest transition-colors">
+                    <i data-lucide="refresh-cw" class="w-3 h-3"></i> New Sampling
+                </button>
+            </div>
+
+            <!-- Configuration -->
+            <div class="space-y-6 pt-6 border-t border-white/5">
+                <div class="space-y-4">
+                    <label class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">DBSCAN Parameters</label>
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                            <span>Epsilon (Radius)</span>
+                            <span id="val-eps" class="text-indigo-400">32px</span>
+                        </div>
+                        <input id="input-eps" type="range" min="10" max="80" value="32" class="custom-range">
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                            <span>Min Points</span>
+                            <span id="val-minpts" class="text-indigo-400">4</span>
+                        </div>
+                        <input id="input-minpts" type="range" min="2" max="15" value="4" class="custom-range">
+                    </div>
+                </div>
+
+                <div class="space-y-4 pt-4">
+                    <label class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">K-Means Parameters</label>
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                            <span>Clusters (K)</span>
+                            <span id="val-k" class="text-indigo-400">3</span>
+                        </div>
+                        <input id="input-k" type="range" min="2" max="8" value="3" class="custom-range">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Playback Controls -->
+            <div class="space-y-6 pt-6 border-t border-white/5">
+                <div class="flex items-center gap-2">
+                    <button id="btn-play" class="flex-1 flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-black text-[11px] uppercase tracking-widest transition-all shadow-lg shadow-emerald-900/20">
+                        <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+                        <span>Run Experiment</span>
+                    </button>
+                    <button id="btn-reset" class="p-3 rounded bg-[#111] text-slate-500 hover:bg-slate-900 border border-slate-800">
+                        <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex justify-between text-[10px] font-bold uppercase tracking-widest text-slate-600">
+                        <span>Playback Velocity</span>
+                        <span id="val-speed">30x</span>
+                    </div>
+                    <input id="input-speed" type="range" min="1" max="100" value="30" class="custom-range accent-slate-600">
+                </div>
+            </div>
+
+            <!-- Progress -->
+            <div class="mt-auto pt-6 border-t border-white/5">
+                <div class="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-700 mb-2">
+                    <span>Experiment Pipeline</span>
+                    <span id="val-progress">0%</span>
+                </div>
+                <div class="w-full h-1 bg-slate-900 rounded-full overflow-hidden">
+                    <div id="progress-bar" class="h-full bg-indigo-500 transition-all duration-300 w-0"></div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Visualizer Area -->
+        <main class="flex-1 p-8 grid grid-cols-1 xl:grid-cols-2 gap-8 h-full bg-[#050505]">
+            <!-- DBSCAN View -->
+            <div class="flex flex-col rounded-3xl overflow-hidden glass-panel relative">
+                <div class="bg-[#111] px-5 py-3 border-b border-white/5 flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div id="dbscan-status-dot" class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                        <span class="text-[11px] font-black uppercase tracking-[0.2em] text-white/80">DBSCAN (Density Propagation)</span>
+                    </div>
+                    <div id="dbscan-message" class="bg-white/5 px-2 py-0.5 rounded text-[9px] font-mono text-white/40 uppercase tracking-tighter">IDLE</div>
+                </div>
+                <div class="flex-1 relative bg-black/40">
+                    <svg id="svg-dbscan"></svg>
+                    
+                    <!-- DBSCAN Legend -->
+                    <div class="absolute bottom-6 left-6 p-4 glass-panel rounded-2xl border border-white/10 flex flex-col gap-2">
+                        <div class="legend-item">
+                            <div class="w-3 h-3 rounded-full border border-[#ef4444] border-dashed"></div>
+                            <span>Outlier / Noise</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- K-Means View -->
+            <div class="flex flex-col rounded-3xl overflow-hidden glass-panel">
+                <div class="bg-[#111] px-5 py-3 border-b border-white/5 flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div id="kmeans-status-dot" class="w-2 h-2 rounded-full bg-indigo-500"></div>
+                        <span class="text-[11px] font-black uppercase tracking-[0.2em] text-white/80">K-Means (Centroid Convergence)</span>
+                    </div>
+                    <div id="kmeans-message" class="bg-white/5 px-2 py-0.5 rounded text-[9px] font-mono text-white/40 uppercase tracking-tighter">IDLE</div>
+                </div>
+                <div class="flex-1 relative bg-black/40">
+                    <svg id="svg-kmeans"></svg>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        // --- DATA & ALGORITHMS ---
+
+        // Box-Muller transform for normal distribution
+        function randomNormal(mean = 0, sd = 1) {
+            let u = 0, v = 0;
+            while (u === 0) u = Math.random(); 
+            while (v === 0) v = Math.random();
+            return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v) * sd + mean;
+        }
+
+        const dist = (p1, p2) => Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+
+        const CLUSTER_COLORS = [
+            { main: '#ff4d4d', hull: 'rgba(255, 77, 77, 0.12)' },
+            { main: '#4da6ff', hull: 'rgba(77, 166, 255, 0.12)' },
+            { main: '#4dff88', hull: 'rgba(77, 255, 136, 0.12)' },
+            { main: '#ffcc33', hull: 'rgba(255, 204, 51, 0.12)' },
+            { main: '#ff4dff', hull: 'rgba(255, 77, 255, 0.12)' },
+            { main: '#a64dff', hull: 'rgba(166, 77, 255, 0.12)' },
+            { main: '#ff944d', hull: 'rgba(255, 148, 77, 0.12)' },
+            { main: '#4dffff', hull: 'rgba(77, 255, 255, 0.12)' },
+        ];
+
+        // DBSCAN Generator
+        function* dbscanGenerator(points, eps, minPts) {
+            let clusterId = 0;
+            const visited = new Set();
+            const clustered = new Set();
+
+            for (const point of points) {
+                if (visited.has(point.id)) continue;
+                visited.add(point.id);
+                yield { type: 'visiting', pointId: point.id };
+
+                const neighborIds = points.filter(p => dist(point, p) <= eps).map(p => p.id);
+                yield { type: 'neighbors', pointId: point.id, neighborIds };
+
+                if (neighborIds.length < minPts) {
+                    yield { type: 'noise', pointId: point.id };
+                } else {
+                    const currentClusterId = clusterId++;
+                    yield { type: 'cluster_start', clusterId: currentClusterId, pointId: point.id };
+                    clustered.add(point.id);
+                    
+                    let seeds = [...neighborIds];
+                    for (let i = 0; i < seeds.length; i++) {
+                        const seedId = seeds[i];
+                        const seedPoint = points.find(p => p.id === seedId);
+                        if (!visited.has(seedId)) {
+                            yield { type: 'visiting', pointId: seedId };
+                            visited.add(seedId);
+                            const seedNeighbors = points.filter(p => dist(seedPoint, p) <= eps).map(p => p.id);
+                            yield { type: 'neighbors', pointId: seedId, neighborIds: seedNeighbors };
+                            if (seedNeighbors.length >= minPts) {
+                                for (const nId of seedNeighbors) {
+                                    if (!seeds.includes(nId)) seeds.push(nId);
+                                }
+                                yield { type: 'cluster_add', clusterId: currentClusterId, pointId: seedId, isCore: true };
+                            } else {
+                                yield { type: 'cluster_add', clusterId: currentClusterId, pointId: seedId, isCore: false };
+                            }
+                        }
+                        if (!clustered.has(seedId)) {
+                            clustered.add(seedId);
+                            yield { type: 'cluster_add', clusterId: currentClusterId, pointId: seedId, isCore: false }; 
+                        }
+                    }
+                }
+            }
+        }
+
+        // K-Means Generator
+        function* kmeansGenerator(points, k, width, height) {
+            let centroids = Array.from({ length: k }, (_, i) => ({
+                id: i,
+                x: Math.random() * width,
+                y: Math.random() * height,
+                color: CLUSTER_COLORS[i % CLUSTER_COLORS.length].main
+            }));
+            yield { type: 'kmeans_move', centroids: [...centroids] };
+            let converged = false;
+            let iterations = 0;
+            while (!converged && iterations < 50) {
+                iterations++;
+                const assignments = points.map(p => {
+                    let minDist = Infinity;
+                    let clusterId = 0;
+                    centroids.forEach((c, idx) => {
+                        const d = dist(p, c);
+                        if (d < minDist) { minDist = d; clusterId = idx; }
+                    });
+                    return { id: p.id, clusterId };
+                });
+                yield { type: 'kmeans_assign', points: assignments };
+                const nextCentroids = centroids.map((c, idx) => {
+                    const assigned = assignments.filter(a => a.clusterId === idx);
+                    if (assigned.length === 0) return c;
+                    const pObjs = assigned.map(a => points.find(p => p.id === a.id));
+                    const avgX = pObjs.reduce((s, p) => s + p.x, 0) / pObjs.length;
+                    const avgY = pObjs.reduce((s, p) => s + p.y, 0) / pObjs.length;
+                    return { ...c, x: avgX, y: avgY };
+                });
+                converged = nextCentroids.every((c, i) => dist(c, centroids[i]) < 0.1);
+                centroids = nextCentroids;
+                yield { type: 'kmeans_move', centroids: [...centroids] };
+            }
+        }
+
+        // Dataset Generator
+        function generateDataset(type, width, height, count) {
+            const points = [];
+            let id = 0;
+            const cx = width / 2, cy = height / 2;
+            const padding = 50;
+            const w = width - padding * 2;
+            const h = height - padding * 2;
+            const r = Math.min(width, height) / 2.5;
+            
+            const add = (x, y) => points.push({ id: id++, x, y, clusterId: null, visited: false, isCore: false });
+
+            if (type === 'smiley') {
+                for (let i = 0; i < count * 0.6; i++) {
+                    const a = Math.random() * Math.PI * 2, d = r + randomNormal(0, 15);
+                    add(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+                }
+                const eOff = r * 0.4, eR = r * 0.15;
+                for (let i = 0; i < count * 0.1; i++) add(cx - eOff + randomNormal(0, eR), cy - eOff * 0.5 + randomNormal(0, eR));
+                for (let i = 0; i < count * 0.1; i++) add(cx + eOff + randomNormal(0, eR), cy - eOff * 0.5 + randomNormal(0, eR));
+                for (let i = 0; i < count * 0.2; i++) {
+                    const a = Math.PI * 0.2 + Math.random() * Math.PI * 0.6, d = r * 0.6 + randomNormal(0, 5);
+                    add(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+                }
+            } else if (type === 'moons') {
+                const radius = Math.min(w, h) / 4;
+                for (let i = 0; i < count / 2; i++) {
+                    const a = Math.random() * Math.PI;
+                    add(cx - radius/2 + Math.cos(a) * radius + randomNormal(0, 10), cy - radius/2 - Math.sin(a) * radius + randomNormal(0, 10));
+                }
+                for (let i = 0; i < count / 2; i++) {
+                    const a = Math.PI + Math.random() * Math.PI;
+                    add(cx + radius/2 + Math.cos(a) * radius + randomNormal(0, 10), cy + radius/2 - Math.sin(a) * radius + randomNormal(0, 10));
+                }
+            } else if (type === 'circles') {
+                const r1 = Math.min(w, h) / 6;
+                const r2 = Math.min(w, h) / 2.5;
+                for (let i = 0; i < count * 0.3; i++) {
+                    const a = Math.random() * Math.PI * 2, d = randomNormal(r1, 8);
+                    add(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+                }
+                for (let i = 0; i < count * 0.7; i++) {
+                    const a = Math.random() * Math.PI * 2, d = randomNormal(r2, 10);
+                    add(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+                }
+            } else if (type === 'blobs') {
+                const blobs = 3;
+                const positions = [[padding + w*0.2, padding + h*0.2], [padding + w*0.8, padding + h*0.5], [padding + w*0.4, padding + h*0.8]];
+                for (let b = 0; b < blobs; b++) {
+                    const [bx, by] = positions[b];
+                    for (let i = 0; i < count / blobs; i++) {
+                        add(bx + randomNormal(0, 30), by + randomNormal(0, 30));
+                    }
+                }
+            } else { // Random
+                for (let i = 0; i < count; i++) {
+                    add(padding + Math.random() * w, padding + Math.random() * h);
+                }
+            }
+            return points;
+        }
+
+        // --- STATE & UI ---
+        const state = {
+            points: [],
+            kmPoints: [],
+            dataset: 'smiley',
+            config: { eps: 32, minPts: 4, k: 3 },
+            playing: false,
+            speed: 30,
+            dbscan: { currentPointId: null, neighborsIds: [], message: 'IDLE', generator: null, finished: false },
+            kmeans: { centroids: [], message: 'IDLE', generator: null, finished: false },
+            width: 600,
+            height: 600
+        };
+
+        const el = {
+            svgDbscan: document.getElementById('svg-dbscan'),
+            svgKmeans: document.getElementById('svg-kmeans'),
+            btnPlay: document.getElementById('btn-play'),
+            btnReset: document.getElementById('btn-reset'),
+            btnNewSample: document.getElementById('btn-new-sample'),
+            datasetContainer: document.getElementById('dataset-buttons'),
+            inputEps: document.getElementById('input-eps'),
+            inputMinPts: document.getElementById('input-minpts'),
+            inputK: document.getElementById('input-k'),
+            inputSpeed: document.getElementById('input-speed'),
+            dbscanMsg: document.getElementById('dbscan-message'),
+            kmeansMsg: document.getElementById('kmeans-message'),
+            progressVal: document.getElementById('val-progress'),
+            progressBar: document.getElementById('progress-bar'),
+            dbscanDot: document.getElementById('dbscan-status-dot'),
+            kmeansDot: document.getElementById('kmeans-status-dot')
+        };
+
+        function render() {
+            // Render DBSCAN
+            el.svgDbscan.innerHTML = `<rect width="100%" height="100%" fill="none" pointer-events="all"></rect>`;
+            
+            // Only show hulls during computation
+            if (!state.dbscan.finished) {
+                state.points.filter(p => p.isCore && p.clusterId >= 0).forEach(p => {
+                    const color = CLUSTER_COLORS[p.clusterId % CLUSTER_COLORS.length];
+                    el.svgDbscan.insertAdjacentHTML('beforeend', `<circle cx="${p.x}" cy="${p.y}" r="${state.config.eps}" fill="${color.hull}" />`);
+                });
+            }
+
+            // Search radius viz
+            if (state.dbscan.currentPointId !== null && !state.dbscan.finished) {
+                const cp = state.points.find(p => p.id === state.dbscan.currentPointId);
+                if (cp) {
+                    el.svgDbscan.insertAdjacentHTML('beforeend', `
+                        <circle cx="${cp.x}" cy="${cp.y}" r="${state.config.eps}" fill="none" stroke="rgba(255,255,255,0.2)" stroke-dasharray="4 2" />
+                    `);
+                    state.dbscan.neighborsIds.forEach(nid => {
+                        const n = state.points.find(p => p.id === nid);
+                        if (n) el.svgDbscan.insertAdjacentHTML('beforeend', `<line x1="${cp.x}" y1="${cp.y}" x2="${n.x}" y2="${n.y}" stroke="rgba(255,255,255,0.1)" stroke-width="0.5" />`);
+                    });
+                }
+            }
+
+            // Render DBSCAN points
+            state.points.forEach(p => {
+                const isCurrent = p.id === state.dbscan.currentPointId && !state.dbscan.finished;
+                const isNoise = p.clusterId === -1;
+                const isClustered = p.clusterId !== null && p.clusterId >= 0;
+                
+                let color, r, fill, stroke, strokeWidth, dashArray = "none";
+
+                if (isCurrent) {
+                    color = "white"; r = 6; fill = "white"; stroke = "white"; strokeWidth = 0;
+                } else if (isNoise) {
+                    color = "#ef4444"; r = 3; fill = "transparent"; stroke = color; strokeWidth = 1; dashArray = "2 1";
+                } else if (isClustered) {
+                    color = CLUSTER_COLORS[p.clusterId % CLUSTER_COLORS.length].main; r = 3.5; fill = color; stroke = "none"; strokeWidth = 0;
+                } else {
+                    color = "#444"; r = 2.5; fill = "transparent"; stroke = color; strokeWidth = 1;
+                }
+
+                el.svgDbscan.insertAdjacentHTML('beforeend', `
+                    <g>
+                        <circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-dasharray="${dashArray}" />
+                        ${isCurrent ? `<circle cx="${p.x}" cy="${p.y}" r="10" fill="none" stroke="white" stroke-width="1" class="animate-ping" />` : ''}
+                    </g>
+                `);
+            });
+
+            // Render K-Means centroids
+            el.svgKmeans.innerHTML = `<rect width="100%" height="100%" fill="none" pointer-events="all"></rect>`;
+            state.kmeans.centroids.forEach(c => {
+                el.svgKmeans.insertAdjacentHTML('beforeend', `
+                    <g style="transform-origin: ${c.x}px ${c.y}px">
+                        <circle cx="${c.x}" cy="${c.y}" r="18" fill="none" stroke="${c.color}" stroke-width="1" stroke-dasharray="4 4" class="${!state.kmeans.finished ? 'spin-slow' : ''}" />
+                        <circle cx="${c.x}" cy="${c.y}" r="4" fill="${c.color}" />
+                        <path d="M ${c.x-10} ${c.y} L ${c.x+10} ${c.y} M ${c.x} ${c.y-10} L ${c.x} ${c.y+10}" stroke="${c.color}" stroke-width="1.5" />
+                    </g>
+                `);
+            });
+
+            // Render K-Means points
+            state.kmPoints.forEach(p => {
+                const color = p.clusterId !== null ? CLUSTER_COLORS[p.clusterId % CLUSTER_COLORS.length].main : '#444';
+                el.svgKmeans.insertAdjacentHTML('beforeend', `<circle cx="${p.x}" cy="${p.y}" r="3" fill="${p.clusterId !== null ? color : 'transparent'}" stroke="${color}" stroke-width="${p.clusterId !== null ? 0 : 1}" />`);
+            });
+
+            // Sync text UI
+            el.dbscanMsg.textContent = state.dbscan.message;
+            el.kmeansMsg.textContent = state.kmeans.message;
+            const visitedCount = state.points.filter(p => p.visited).length;
+            const progress = (visitedCount / state.points.length) * 100;
+            el.progressVal.textContent = Math.round(progress) + '%';
+            el.progressBar.style.width = progress + '%';
+
+            // Active dots
+            el.dbscanDot.className = `w-2 h-2 rounded-full bg-emerald-500 ${!state.dbscan.finished && state.playing ? 'animate-pulse' : ''}`;
+            el.kmeansDot.className = `w-2 h-2 rounded-full bg-indigo-500 ${!state.kmeans.finished && state.playing ? 'animate-pulse' : ''}`;
+        }
+
+        function loop() {
+            if (!state.playing) return;
+
+            const dbscanSteps = Math.max(1, Math.floor(state.speed / 3));
+            const kmeansSteps = Math.max(1, Math.floor(state.speed / 15));
+
+            // DBSCAN tick
+            if (!state.dbscan.finished) {
+                if (!state.dbscan.generator) state.dbscan.generator = dbscanGenerator(state.points, state.config.eps, state.config.minPts);
+                for (let i = 0; i < dbscanSteps; i++) {
+                    const res = state.dbscan.generator.next();
+                    if (res.done) {
+                        state.dbscan.finished = true;
+                        const count = new Set(state.points.filter(p => p.clusterId >= 0).map(p => p.clusterId)).size;
+                        state.dbscan.message = `FINISHED: ${count} CLUSTERS`;
+                        break;
+                    }
+                    const a = res.value;
+                    if (a.type === 'visiting') {
+                        state.dbscan.currentPointId = a.pointId; state.dbscan.neighborsIds = [];
+                        const p = state.points.find(x => x.id === a.pointId); if (p) p.visited = true;
+                    } else if (a.type === 'neighbors') {
+                        state.dbscan.neighborsIds = a.neighborIds;
+                    } else if (a.type === 'cluster_start') {
+                        const p = state.points.find(x => x.id === a.pointId); if (p) { p.clusterId = a.clusterId; p.isCore = true; }
+                        state.dbscan.message = `NEW CLUSTER: #${a.clusterId + 1}`;
+                    } else if (a.type === 'cluster_add') {
+                        const p = state.points.find(x => x.id === a.pointId); if (p) { p.clusterId = a.clusterId; p.isCore = a.isCore; }
+                    } else if (a.type === 'noise') {
+                        const p = state.points.find(x => x.id === a.pointId); if (p) p.clusterId = -1;
+                    }
+                }
+            }
+
+            // K-Means tick
+            if (!state.kmeans.finished) {
+                if (!state.kmeans.generator) state.kmeans.generator = kmeansGenerator(state.kmPoints, state.config.k, state.width, state.height);
+                for (let i = 0; i < kmeansSteps; i++) {
+                    const res = state.kmeans.generator.next();
+                    if (res.done) { state.kmeans.finished = true; state.kmeans.message = `CONVERGED`; break; }
+                    const a = res.value;
+                    if (a.type === 'kmeans_move') {
+                        state.kmeans.centroids = a.centroids; state.kmeans.message = `OPTIMIZING`;
+                    } else if (a.type === 'kmeans_assign') {
+                        a.points.forEach(ap => {
+                            const p = state.kmPoints.find(x => x.id === ap.id); if (p) p.clusterId = ap.clusterId;
+                        });
+                        state.kmeans.message = `ASSIGNING`;
+                    }
+                }
+            }
+
+            if (state.dbscan.finished && state.kmeans.finished) {
+                state.playing = false;
+                el.btnPlay.innerHTML = `<i data-lucide="play" class="w-4 h-4 fill-current"></i><span>Run Experiment</span>`;
+                lucide.createIcons();
+            }
+
+            render();
+            requestAnimationFrame(loop);
+        }
+
+        function reset(newSample = false) {
+            state.playing = false;
+            state.dbscan = { currentPointId: null, neighborsIds: [], message: 'IDLE', generator: null, finished: false };
+            state.kmeans = { centroids: [], message: 'IDLE', generator: null, finished: false };
+            if (newSample) {
+                state.points = generateDataset(state.dataset, 600, 600, 500);
+            } else {
+                state.points.forEach(p => { p.clusterId = null; p.visited = false; p.isCore = false; });
+            }
+            state.kmPoints = JSON.parse(JSON.stringify(state.points));
+            
+            el.btnPlay.innerHTML = `<i data-lucide="play" class="w-4 h-4 fill-current"></i><span>Run Experiment</span>`;
+            lucide.createIcons();
+            render();
+        }
+
+        function init() {
+            const types = ['smiley', 'moons', 'blobs', 'circles', 'random'];
+            types.forEach(t => {
+                const btn = document.createElement('button');
+                btn.className = `px-3 py-2 text-[10px] font-bold rounded border transition-all uppercase tracking-widest ${state.dataset === t ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg' : 'bg-[#111] border-slate-800 text-slate-500 hover:border-slate-600'}`;
+                btn.textContent = t;
+                btn.onclick = () => {
+                    state.dataset = t; reset();
+                    Array.from(el.datasetContainer.children).forEach(b => {
+                        const active = b.textContent === state.dataset;
+                        b.className = `px-3 py-2 text-[10px] font-bold rounded border transition-all uppercase tracking-widest ${active ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg' : 'bg-[#111] border-slate-800 text-slate-500 hover:border-slate-600'}`;
+                    });
+                };
+                el.datasetContainer.appendChild(btn);
+            });
+
+            el.inputEps.oninput = (e) => { state.config.eps = +e.target.value; document.getElementById('val-eps').textContent = state.config.eps + 'px'; reset(); };
+            el.inputMinPts.oninput = (e) => { state.config.minPts = +e.target.value; document.getElementById('val-minpts').textContent = state.config.minPts; reset(); };
+            el.inputK.oninput = (e) => { state.config.k = +e.target.value; document.getElementById('val-k').textContent = state.config.k; reset(); };
+            el.inputSpeed.oninput = (e) => { state.speed = +e.target.value; document.getElementById('val-speed').textContent = state.speed + 'x'; };
+            el.btnNewSample.onclick = () => reset(true);
+            el.btnReset.onclick = () => reset();
+            el.btnPlay.onclick = () => {
+                state.playing = !state.playing;
+                el.btnPlay.innerHTML = state.playing 
+                    ? `<i data-lucide="pause" class="w-4 h-4 fill-current"></i><span>Pause</span>` 
+                    : `<i data-lucide="play" class="w-4 h-4 fill-current"></i><span>Run Experiment</span>`;
+                lucide.createIcons();
+                if (state.playing) loop();
+            };
+
+            reset(true);
+            lucide.createIcons();
+        }
+
+        init();
+    </script>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
